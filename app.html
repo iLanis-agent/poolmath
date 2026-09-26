@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PoolMath - honest pool math</title>
+<style>
+  :root { --bg:#0f1518; --card:#152129; --ink:#e8f2f4; --dim:#93adb5; --acc:#4ecbe0; --hot:#8fd98a; --cold:#d98a8a; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--ink); font:16px/1.5 -apple-system, "Segoe UI", Roboto, sans-serif; }
+  header { padding:28px 24px 8px; max-width:980px; margin:0 auto; display:flex; justify-content:space-between; align-items:baseline; }
+  h1 { margin:0; font-size:28px; }
+  h1 span { color:var(--acc); }
+  nav a { color:var(--dim); text-decoration:none; font-size:14px; }
+  main { max-width:980px; margin:0 auto; padding:16px 24px 60px; display:grid; gap:18px; }
+  .card { background:var(--card); border-radius:14px; padding:20px; }
+  .card h2 { margin:0 0 12px; font-size:13px; letter-spacing:1.5px; color:var(--dim); text-transform:uppercase; }
+  .grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(165px,1fr)); gap:14px; }
+  label { display:block; font-size:13px; color:var(--dim); margin-bottom:4px; }
+  input, select { width:100%; background:#0f1a20; border:1px solid #2c4753; color:var(--ink); border-radius:8px; padding:9px 10px; font-size:15px; }
+  .hint { font-size:12.5px; color:var(--dim); margin-top:10px; }
+  button { cursor:pointer; border:0; border-radius:9px; padding:11px 16px; font-size:15px; background:var(--acc); color:#07222a; font-weight:600; }
+  button.ghost { background:#1f3440; color:var(--ink); font-weight:500; }
+  .row { display:flex; gap:10px; flex-wrap:wrap; margin-top:14px; }
+  .verdict { font-size:17px; line-height:1.65; }
+  .verdict b { color:var(--acc); }
+  .stats { display:grid; grid-template-columns:repeat(auto-fit,minmax(140px,1fr)); gap:10px; margin-top:16px; }
+  .stat { background:#0f1a20; border-radius:10px; padding:12px; }
+  .stat .v { font-size:19px; font-weight:700; color:var(--acc); }
+  .stat .k { font-size:12px; color:var(--dim); margin-top:2px; }
+  .badge { display:inline-block; padding:3px 10px; border-radius:20px; font-size:12.5px; font-weight:600; margin-left:8px; }
+  .b-right { background:#1d3320; color:var(--hot); }
+  .b-under { background:#3a3016; color:var(--acc); }
+  .b-over { background:#3a1d1d; color:var(--cold); }
+  .note { margin-top:14px; font-size:13.5px; color:var(--dim); }
+  .note b { color:var(--acc); font-weight:600; }
+  #lenRow.hidden { display:none; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Pool<span>Math</span></h1>
+  <nav><a href="index.html">home</a></nav>
+</header>
+<main>
+  <section class="card">
+    <h2>The pool</h2>
+    <div class="grid">
+      <div><label>Shape</label><select id="shape">
+        <option value="rect">rectangular</option><option value="round">round</option>
+      </select></div>
+      <div id="lenRow"><label>Length (ft)</label><input id="len" type="number" value="32"></div>
+      <div><label id="widthLabel">Width (ft)</label><input id="width" type="number" value="16"></div>
+      <div><label>Average depth (ft)</label><input id="depth" type="number" step="0.5" value="5"></div>
+    </div>
+    <p class="hint">Average depth, not the deep end: (shallow + deep) / 2. Everyone's guess at their pool volume is 20% high - the deep end is a small part of the water.</p>
+  </section>
+
+  <section class="card">
+    <h2>The pump and the power bill</h2>
+    <div class="grid">
+      <div><label>Pump flow (GPM)</label><input id="gpm" type="number" value="50"></div>
+      <div><label>Pump size (HP)</label><input id="hp" type="number" step="0.5" value="1.5"></div>
+      <div><label>Hours run per day</label><input id="hours" type="number" value="24"></div>
+      <div><label>Electricity ($/kWh)</label><input id="kwh" type="number" step="0.01" value="0.15"></div>
+    </div>
+    <div class="row">
+      <button id="run">Run the honest numbers</button>
+      <button class="ghost" data-preset="myth">the 24/7 pumper</button>
+      <button class="ghost" data-preset="weekend">heat for the weekend</button>
+      <button class="ghost" data-preset="above">above-ground round pool</button>
+    </div>
+  </section>
+
+  <section class="card" id="result" hidden>
+    <h2>The verdict</h2>
+    <p class="verdict" id="verdictText"></p>
+    <div class="stats" id="stats"></div>
+    <p class="note" id="advice"></p>
+  </section>
+
+  <section class="card">
+    <h2>Why nobody's pool is the size they think</h2>
+    <p class="note">Volume is <b>average depth</b> times surface area, and the deep end is a small part of the water - a "35,000 gallon" pool is usually 20,000. Pumping is <b>turnovers, not hours</b>: a pool needs the full volume moved once or twice a day, which is often 6-8 hours of runtime - the 24/7 pump is a power bill polishing clean water. Evaporation quietly drinks <b>a quarter-inch a week</b> in dry heat, which on a normal pool is hundreds of gallons. And heating is brutally linear: <b>8.33 BTU per gallon per degree</b> - warming a weekend party pool 10 degrees costs what it costs, and the only real lever is a cover.</p>
+  </section>
+</main>
+<script src="engine.js"></script>
+<script>
+(function () {
+  var $ = function (id) { return document.getElementById(id); };
+
+  $('shape').onchange = function () {
+    var round = $('shape').value === 'round';
+    $('lenRow').classList.toggle('hidden', round);
+    $('widthLabel').textContent = round ? 'Diameter (ft)' : 'Width (ft)';
+  };
+
+  var PRESETS = {
+    myth: { shape: 'rect', len: 32, width: 16, depth: 5, gpm: 50, hp: 1.5, hours: 24, kwh: 0.15 },
+    weekend: { shape: 'rect', len: 32, width: 16, depth: 5, gpm: 50, hp: 1.5, hours: 8, kwh: 0.15 },
+    above: { shape: 'round', len: 24, width: 24, depth: 4, gpm: 30, hp: 1, hours: 12, kwh: 0.15 }
+  };
+  document.querySelectorAll('[data-preset]').forEach(function (b) {
+    b.onclick = function () {
+      var p = PRESETS[b.dataset.preset];
+      Object.keys(p).forEach(function (k) { $(k).value = p[k]; });
+      $('shape').onchange();
+      run(b.dataset.preset === 'weekend');
+    };
+  });
+
+  function run(showHeat) {
+    var shape = $('shape').value;
+    var a = shape === 'round' ? +$('width').value : +$('len').value;
+    var b = shape === 'round' ? 0 : +$('width').value;
+    var depth = +$('depth').value || 0;
+    var gal = PoolMath.volumeGallons(shape, a, b, depth);
+    var gpm = +$('gpm').value || 0;
+    var hp = +$('hp').value || 0;
+    var hours = +$('hours').value || 0;
+    var kwh = +$('kwh').value || 0;
+    var turnover = PoolMath.turnoverHours(gal, gpm);
+    var v = PoolMath.pumpingVerdict(hours, turnover);
+    var costDay = PoolMath.pumpCostPerDay(hp, hours, kwh);
+    var costSeason = Math.round(costDay * 150 * 100) / 100;
+    var surface = shape === 'round' ? Math.round(Math.PI * Math.pow(a / 2, 2)) : Math.round(a * b);
+    var evap = PoolMath.evapGallonsPerWeek(surface, 0.25);
+    var heatCost = PoolMath.heatCost(gal, 10, 1.20, 0.85);
+    var heatHrs = PoolMath.heatHours(gal, 10, 250000, 0.85);
+
+    var text = 'Your pool holds about <b>' + PoolMath.fmtGal(gal) + '</b>. The pump moves the whole volume in <b>' +
+      turnover + ' hours</b>, so ' + hours + ' hours a day is <b>' + v.turnovers + ' turnovers</b>. ';
+    if (v.code === 'over') text += 'You could cut runtime by a third and lose nothing but the bill.';
+    else if (v.code === 'under') text += 'That is not enough - stagnant water is a chemistry problem with a power-bill cause.';
+    else text += 'That is exactly the pocket.';
+
+    $('verdictText').innerHTML = text + ' <span class="badge b-' + v.code + '">' + v.label + '</span>';
+
+    var stats = [
+      { v: PoolMath.fmtGal(gal), k: 'honest volume' },
+      { v: turnover + ' h', k: 'per full turnover' },
+      { v: v.turnovers, k: 'turnovers per day' },
+      { v: '$' + costDay, k: 'pumping, per day ($' + costSeason + '/season)' },
+      { v: evap.toLocaleString('en-US') + ' gal', k: 'evaporation, per hot week' },
+      { v: '$' + heatCost, k: 'to heat 10 deg once (' + heatHrs + ' h)' }
+    ];
+    $('stats').innerHTML = stats.map(function (x) {
+      return '<div class="stat"><div class="v">' + x.v + '</div><div class="k">' + x.k + '</div></div>';
+    }).join('');
+
+    var advice;
+    if (showHeat) {
+      advice = 'The honest weekend math: raising ' + PoolMath.fmtGal(gal) + ' by 10 degrees takes about <b>' + heatHrs +
+        ' hours on a 250k BTU heater and $' + heatCost + ' of gas</b>. A $60 solar cover does more for weekend swimming than a bigger heater - it stops tonight losing what you paid for this afternoon.';
+    } else if (v.code === 'over') {
+      advice = 'Drop to ' + Math.ceil(turnover * 1.2) + ' hours and check clarity for a week. If it stays clear, that was free money. A variable-speed pump at low RPM moves the same water for roughly half the watts.';
+    } else if (v.code === 'under') {
+      advice = 'Run at least ' + Math.ceil(turnover) + ' hours, split morning and evening so the skimmer catches the day as it lands. Cloudiness that chemicals keep "fixing" is usually this number.';
+    } else {
+      advice = 'Evaporation check: mark the waterline with tape. More than a quarter-inch a week in mild weather is a leak, not the sun - the bucket test settles it in 24 hours.';
+    }
+    $('advice').innerHTML = advice;
+
+    $('result').hidden = false;
+    $('result').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }
+
+  $('run').onclick = function () { run(false); };
+})();
+</script>
+</body>
+</html>
